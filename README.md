@@ -1,0 +1,1 @@
+# gostruct2graphql
