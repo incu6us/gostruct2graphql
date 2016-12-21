@@ -144,7 +144,7 @@ func getRootDescription(strct interface{}) {
 		describeStruct(strct)
 
 		buffer.WriteString(`},
-	  })`)
+})`)
 	}
 
 	if reflect.TypeOf(strct).Kind() == reflect.Slice {
