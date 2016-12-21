@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"reflect"
-
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/ioutil"
+	"reflect"
+	// "go/ast"
+	// "go/importer"
+	// "go/parser"
+	// "go/token"
+	// "go/types"
 )
 
 // type Repository []struct {
@@ -190,35 +194,66 @@ func main() {
 	// fmt.Println(buffer.String())
 
 	parseStructFile()
+	fmt.Println(buffer.String())
 }
 
 func parseStructFile() {
 	srcBytes, _ := ioutil.ReadFile("struct.go")
-	src := string(srcBytes[:])
-	fmt.Println("!!!!", src)
+	src := string(srcBytes)
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "", src, 0)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	// fmt.Println(*f.Scope)
-	typeDecl := f.Decls[0].(*ast.GenDecl)
-	structDecl := typeDecl.Specs[0].(*ast.TypeSpec).Type.(*ast.StructType)
-	fields := structDecl.Fields.List
-	for _, field := range fields {
-		typeExpr := field.Type
 
-		start := typeExpr.Pos() - 1
-		end := typeExpr.End() - 1
-
-		// grab it in source
-		typeInSource := src[start:end]
-
-		fmt.Println(typeInSource)
-	}
-	// Print the imports from the file's AST.
-	// for _, s := range *f.Scope {
-	// 	fmt.Println(s.Path.Value)
+	// conf := types.Config{Importer: importer.Default()}
+	// pkg, err := conf.Check("", fset, []*ast.File{f}, nil)
+	// if err != nil {
+	// 	fmt.Println(err) // type error
 	// }
+	// for _, name := range pkg.Scope().Names() {
+	// 	fmt.Printf("%#v\n", pkg.Scope().Lookup(name).(*types.TypeName).Name())
+	// 	fmt.Printf("%#v\n", pkg.Scope().Lookup(name).(*types.TypeName).Type().Underlying())
+	// 	switch pkg.Scope().Lookup(name).(*types.TypeName).Type().Underlying().(type) {
+	// 	case *types.Struct:
+	// 		fmt.Printf("%#v", unsafe.Pointer(types.NewPointer(pkg.Scope().Lookup(name).(*types.TypeName).Type().(*types.Named))))
+	// 	}
+	// 	// if obj, ok := pkg.Scope().Lookup(name).(*types.TypeName); ok {
+	// 	// 	fmt.Printf("%v\n", obj.Type().(*types.Named))
+	// 	// }
+	// }
+
+	for decl := range f.Decls {
+
+		typeDecl := f.Decls[decl].(*ast.GenDecl)
+		switch typeDecl.Specs[0].(*ast.TypeSpec).Type.(type) {
+		case *ast.StructType:
+			fmt.Println("StructType")
+			start := typeDecl.Specs[0].(*ast.TypeSpec).Pos() - 1
+			end := typeDecl.Specs[0].(*ast.TypeSpec).Type.End() - 1
+			source := string(srcBytes[start:end])
+			fmt.Printf("%#v\n", source)
+			// case *ast.ArrayType:
+			// 	fmt.Println("ArrayType")
+			// 	start := typeDecl.Specs[0].(*ast.TypeSpec).Pos() - 1
+			// 	end := typeDecl.Specs[0].(*ast.TypeSpec).Type.End() - 1
+			// 	fmt.Println(string(srcBytes[start:end]))
+		}
+	}
+
+	// var conf loader.Config
+	// conf.CreateFromFilenames("main", "structs/structs.go")
+	// conf.Import("struct-to-graphql/structs")
+	// // conf.ImportWithTests("fmt")
+	// prog, _ := conf.Load()
+	// // if err != nil {
+	// // 	fmt.Println(err)
+	// // }
+	// if prog != nil {
+	// 	for p := range prog.AllPackages {
+	// 		fmt.Println(p)
+	// 	}
+	// }
+
 }

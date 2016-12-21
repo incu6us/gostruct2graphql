@@ -1,5 +1,9 @@
 package main
 
+type Test struct {
+	Stringer string
+}
+
 type Repository []struct {
 	CacheMaxSeconds int64 `json:"cacheMaxSeconds"`
 	CurrentTime     int64 `json:"currentTime"`
