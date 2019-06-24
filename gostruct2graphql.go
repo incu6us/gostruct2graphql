@@ -2,35 +2,29 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"reflect"
-
-	"gostruct2graphql/structs"
 )
 
-var (
-	buffer bytes.Buffer
-)
-
-func describeStruct(s interface{}) {
-
-	if reflect.ValueOf(s).Kind() == reflect.Slice {
-		switch reflect.ValueOf(s).Type().Elem().Kind() {
+func describeStruct(buffer *bytes.Buffer, strct interface{}) error {
+	if reflect.ValueOf(strct).Kind() == reflect.Slice {
+		switch reflect.ValueOf(strct).Type().Elem().Kind() {
 		case reflect.Struct:
-
-			iType := reflect.TypeOf(s).Elem()
-			describeSlice(iType)
-
+			iType := reflect.TypeOf(strct).Elem()
+			if err := describeSlice(buffer, iType); err != nil {
+				return err
+			}
 		default:
-			describeSimpleType("!!! something wrong happens !!!")
+			if err := describeSimpleType(buffer, strct); err != nil {
+				return err
+			}
 		}
 
-		return
+		return nil
 	}
 
-	iValue := reflect.ValueOf(s)
-	iType := reflect.TypeOf(s)
+	iValue := reflect.ValueOf(strct)
+	iType := reflect.TypeOf(strct)
 
 	for i := 0; i < iType.NumField(); i++ {
 		v := iValue.Field(i)
@@ -42,8 +36,9 @@ func describeStruct(s interface{}) {
 					Name: "` + iType.Field(i).Name + `",
 					Fields: graphql.Fields{`)
 
-			// describeSimpleType(iType.Field(i).Name, "struct", string(iType.Field(i).Tag))
-			describeStruct(v.Interface())
+			if err := describeStruct(buffer, v.Interface()); err != nil {
+				return err
+			}
 
 			buffer.WriteString(`	},
       }),
@@ -54,58 +49,68 @@ func describeStruct(s interface{}) {
 					Name: "` + iType.Field(i).Name + `",
 					Fields: graphql.Fields{`)
 
-			// describeSimpleType(iType.Field(i).Name, "slice", string(iType.Field(i).Tag))
-			describeStruct(v.Interface())
+			if err := describeStruct(buffer, v.Interface()); err != nil {
+				return err
+			}
 
 			buffer.WriteString(`	},
       })),
     },`)
 		default:
-			describeSimpleType(iType.Field(i).Name, iType.Field(i).Type.String(), string(iType.Field(i).Tag))
+			if err := describeSimpleType(buffer, iType.Field(i).Name, iType.Field(i).Type.String(), string(iType.Field(i).Tag)); err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
 }
 
-func describeSlice(iType reflect.Type) {
-
+func describeSlice(buffer *bytes.Buffer, iType reflect.Type) error {
 	for i := 0; i < iType.NumField(); i++ {
-
 		switch iType.Field(i).Type.Kind() {
 		case reflect.Struct:
-			// fmt.Println("!!!", strings.Split(string(iType.Field(i).Tag), ":")[1])
 			buffer.WriteString(`"` + iType.Field(i).Name + `": &graphql.Field{
 				Type: graphql.NewObject(graphql.ObjectConfig{
 					Name: "` + iType.Field(i).Name + `",
 					Fields: graphql.Fields{`)
 
-			describeSimpleType(iType.Field(i).Name, "struct", string(iType.Field(i).Tag))
-			describeSlice(iType.Field(i).Type)
+			if err := describeSimpleType(buffer, iType.Field(i).Name, "struct", string(iType.Field(i).Tag)); err != nil {
+				return err
+			}
+			if err := describeSlice(buffer, iType.Field(i).Type); err != nil {
+				return err
+			}
 			buffer.WriteString(`},
       }),
     },`)
 		case reflect.Slice:
-			// if iType.Field(i).Type.Elem().Kind() == reflect.Struct {
 			buffer.WriteString(`"` + iType.Field(i).Name + `": &graphql.Field{
 				Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
 					Name: "` + iType.Field(i).Name + `",
 					Fields: graphql.Fields{`)
-			describeSimpleType(iType.Field(i).Name, "slice", string(iType.Field(i).Tag))
-			describeSlice(iType.Field(i).Type.Elem())
+			if err := describeSimpleType(buffer, iType.Field(i).Name, "slice", string(iType.Field(i).Tag)); err != nil {
+				return err
+			}
+			if err := describeSlice(buffer, iType.Field(i).Type.Elem()); err != nil {
+				return err
+			}
 			buffer.WriteString(`},
       })),
     },`)
-			// }
 		default:
-			describeSimpleType(iType.Field(i).Name, iType.Field(i).Type.String(), string(iType.Field(i).Tag))
+			if err := describeSimpleType(buffer, iType.Field(i).Name, iType.Field(i).Type.String(), string(iType.Field(i).Tag)); err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
 }
 
-func describeSimpleType(text ...interface{}) {
-	var fieldName string = text[0].(string)
-	// var fieldType string = text[1].(string)
-	// var fieldTag string = strings.Split(text[2].(string), ":")[1]
-	var out string = ""
+func describeSimpleType(buffer *bytes.Buffer, text ...interface{}) error {
+	var fieldName = text[0].(string)
+	var out = ""
 	switch text[1] {
 	case "string":
 		out = `"` + fieldName + `": &graphql.Field{
@@ -127,45 +132,45 @@ func describeSimpleType(text ...interface{}) {
 		out = `"` + fieldName + `": &graphql.Field{
             Type: graphql.Int,
           },`
+	case "struct", "slice":
 	default:
-		errors.New("!!! Error !!! no such format")
+		return fmt.Errorf("unknown type: %s", fieldName)
 	}
 	buffer.WriteString(out)
+
+	return nil
 }
 
-func getRootDescription(strct interface{}) {
+func GetType(strct interface{}) (string, error) {
+	var buffer bytes.Buffer
 
 	if reflect.TypeOf(strct).Kind() == reflect.Struct {
-		buffer.WriteString("// Generated by gostruct2graphql\n")
 		buffer.WriteString(reflect.TypeOf(strct).Name() + `GqlType := graphql.NewObject(graphql.ObjectConfig{
 		  Name: "` + reflect.TypeOf(strct).Name() + `",
 		  Fields: graphql.Fields{`)
 
-		describeStruct(strct)
+		if err := describeStruct(&buffer, strct); err != nil {
+			return "", err
+		}
 
 		buffer.WriteString(`},
 })`)
 	}
 
 	if reflect.TypeOf(strct).Kind() == reflect.Slice {
-		buffer.WriteString("// Generated by gostruct2graphql\n")
 		buffer.WriteString(reflect.TypeOf(strct).Name() + `GqlType := graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
 		  Name: "` + reflect.TypeOf(strct).Name() + `",
 		  Fields: graphql.Fields{`)
 
-		describeStruct(strct)
+		if err := describeStruct(&buffer, strct); err != nil {
+			return "", err
+		}
 
 		buffer.WriteString(`},
 }))`)
 	}
 	buffer.WriteString("\n")
-	fmt.Println(buffer.String())
-	buffer.Reset()
-}
+	defer buffer.Reset()
 
-func main() {
-
-	getRootDescription(structs.Repository{})
-	getRootDescription(structs.Test{})
-
+	return buffer.String(), nil
 }
